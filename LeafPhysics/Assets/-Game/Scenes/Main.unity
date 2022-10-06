@@ -196,6 +196,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a37440647d0f48478376484bf731899, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  useJobs: 1
   instanceCount: 15000
   force: 500
   gravity: {x: 0, y: -9.81, z: 0}
