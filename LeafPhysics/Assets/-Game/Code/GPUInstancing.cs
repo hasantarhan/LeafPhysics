@@ -12,7 +12,9 @@ namespace _Game.Code
     {
         [SerializeField] private int instanceCount;
         [SerializeField] private float force;
-        [SerializeField] [Range(0,1)] private float upForce=0.4f;
+        [SerializeField] private Vector3 gravity;
+        [SerializeField] [Range(0, 1)] private float upForce = 0.4f;
+        [SerializeField] [Range(0.1f,1)]private float friction;
         [SerializeField] private float radius;
         [SerializeField] private float spawnHeight;
         [SerializeField] private float groundHeight;
@@ -64,7 +66,6 @@ namespace _Game.Code
                     Vector3 pos;
                     Quaternion rot;
                     Vector3 scale;
-                    var gravity = new Vector3(0, -9.81f, 0);
                     matrices[i][j].Decompose(out pos, out rot, out scale);
                     velocities[i][j] -= gravity * Time.deltaTime;
                     velocities[i][j] -= (velocities[i][j]) * (Time.deltaTime);
@@ -76,20 +77,22 @@ namespace _Game.Code
                         dir.y -= upForce;
                         if (velocityUtil.speed > 0.5f)
                         {
-                            velocities[i][j] += (Time.deltaTime * force * dir * t) * Mathf.Clamp(velocityUtil.speed, 0, 1);
+                            velocities[i][j] += dir * (Time.deltaTime * force * t * Mathf.Clamp01(velocityUtil.speed));
                         }
                     }
 
-                    if (velocities[i][j].magnitude > 1)
+                    if (velocities[i][j].magnitude > 5)
                     {
                         rot = Quaternion.Slerp(rot, Random.rotation, 0.2f);
                     }
+
                     if (pos.y < groundHeight)
                     {
                         pos.y = groundHeight;
-                        gravity.y = 0;
-                        velocities[i][j] = Vector3.MoveTowards(velocities[i][j], Vector3.zero, 0.2f);
+                     //   gravity.y = 0;
+                        velocities[i][j] = Vector3.MoveTowards(velocities[i][j], Vector3.zero, friction);
                     }
+
                     pos -= velocities[i][j] * Time.deltaTime;
                     matrices[i][j].SetTRS(pos, rot, scale);
                 }
