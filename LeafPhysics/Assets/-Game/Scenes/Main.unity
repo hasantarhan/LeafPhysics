@@ -197,15 +197,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   useJobs: 1
-  instanceCount: 15000
+  instanceCount: 100000
   force: 500
-  gravity: {x: 0, y: -9.81, z: 0}
-  upForce: 0.4
+  gravity: {x: 0, y: -9, z: 0}
+  upForce: 0.5
   friction: 0.5
   radius: 2
   spawnHeight: 0.1
   groundHeight: 0.1
-  positionRange: {x: -25, y: 25}
+  positionRange: {x: -50, y: 50}
   scaleRange: {x: 0.1, y: 0.2}
   mesh: {fileID: -462981019419857548, guid: 733ae1cc67a045e44894e5707182a71a, type: 3}
   material: {fileID: 2100000, guid: e5b6aa14853230c448eaa17af06c5185, type: 2}

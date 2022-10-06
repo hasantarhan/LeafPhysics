@@ -17,7 +17,7 @@ namespace _Game.Code
         [SerializeField] private float force;
         [SerializeField] private Vector3 gravity;
         [SerializeField] [Range(0, 1)] private float upForce = 0.4f;
-        [SerializeField] [Range(0.1f,1)]private float friction;
+        [SerializeField] [Range(0.1f, 1)] private float friction;
         [SerializeField] private float radius;
         [SerializeField] private float spawnHeight;
         [SerializeField] private float groundHeight;
@@ -26,7 +26,7 @@ namespace _Game.Code
         [SerializeField] private Mesh mesh;
         [SerializeField] private Material material;
         [SerializeField] private Transform head;
-        
+
         private Vector3[][] velocities;
         private Matrix4x4[][] matrices;
         private VelocityUtil velocityUtil;
@@ -110,7 +110,8 @@ namespace _Game.Code
                     upForce = upForce,
                     baseSeed = i + 1,
                     velocities = velocities,
-                    matrices = matrices
+                    matrices = matrices,
+                    gravity = gravity
                 }.Schedule(matrices.Length, 64);
 
                 job.Complete();
@@ -130,7 +131,6 @@ namespace _Game.Code
 
         private void CalculateMatrices()
         {
-
             for (int i = 0; i < instanceCount / 1023 + 1; i++)
             {
                 for (int j = 0; j < 1023; j++)
@@ -166,7 +166,6 @@ namespace _Game.Code
 
                     pos -= velocities[i][j] * Time.deltaTime;
                     matrices[i][j].SetTRS(pos, rot, scale);
-
                 }
             }
         }
@@ -196,7 +195,10 @@ namespace _Game.Code
             [ReadOnly] public float deltaTime;
             [ReadOnly] public float groundHeight;
             [ReadOnly] public float friction;
+
             [ReadOnly] public Vector3 headPosition;
+            [ReadOnly] public Vector3 gravity;
+
             [ReadOnly] public int baseSeed;
 
             public NativeArray<Matrix4x4> matrices;
@@ -206,9 +208,10 @@ namespace _Game.Code
             {
                 var seed = baseSeed + index;
                 var rnd = new Unity.Mathematics.Random((uint)seed);
-              
-                matrices[index].Decompose(out Vector3 pos, out Quaternion rot, out Vector3 scale);
 
+                matrices[index].Decompose(out Vector3 pos, out Quaternion rot, out Vector3 scale);
+                velocities[index] -= gravity * deltaTime;
+                velocities[index] -= (velocities[index]) * deltaTime;
                 var dist = Vector3.Distance(headPosition, pos);
 
                 if (dist < radius)
@@ -222,11 +225,14 @@ namespace _Game.Code
                     }
                 }
 
-                if (velocities[index].magnitude > 5)
+                if (velocities[index].magnitude>1f)
                 {
-                    quaternion q = new quaternion(rnd.NextFloat4());
-                    rot = math.slerp(rot, q, 0.2f);
+                 quaternion q = new quaternion(rnd.NextFloat(-1,1),rnd.NextFloat(-1,1),rnd.NextFloat(-1,1),0);
+               q=  quaternion.Euler(rnd.NextFloat3(-360, 360));
+                    rot = math.slerp(rot, q,0.75f);
                 }
+           
+
 
                 if (pos.y < groundHeight)
                 {
