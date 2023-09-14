@@ -12,6 +12,7 @@ namespace _Game.Code
 {
     public class GPUInstancing : MonoBehaviour
     {
+        [SerializeField] private bool useSingleMatrix = true;
         [SerializeField] private bool useJobs;
         [SerializeField] private int instanceCount;
         [SerializeField] private float force;
@@ -26,6 +27,9 @@ namespace _Game.Code
         [SerializeField] private Mesh mesh;
         [SerializeField] private Material material;
         [SerializeField] private Transform head;
+
+        private Matrix4x4[] allMatrices;
+        private Vector3[] allVelocities;
 
         private Vector3[][] velocities;
         private Matrix4x4[][] matrices;
@@ -44,25 +48,46 @@ namespace _Game.Code
             mpb = new MaterialPropertyBlock();
 
             velocityUtil = new VelocityUtil(head);
-            velocities = new Vector3[instanceCount / 1023 + 1][];
-            matrices = new Matrix4x4[instanceCount / 1023 + 1][];
 
-            for (int i = 0; i < instanceCount / 1023 + 1; i++)
+            if (useSingleMatrix)
             {
-                matrices[i] = new Matrix4x4[1023];
-                velocities[i] = new Vector3[1023];
-                for (int j = 0; j < 1023; j++)
+                allMatrices = new Matrix4x4[instanceCount];
+                allVelocities = new Vector3[instanceCount];
+
+                for (int i = 0; i < instanceCount; i++)
                 {
                     var newPos = new Vector3(Random.Range(-positionRange.x, positionRange.x), spawnHeight,
                         Random.Range(-positionRange.y, positionRange.y));
                     var randomRotate = new Vector3(0, Random.Range(-360, 360), 0);
                     var scale = Random.Range(scaleRange.x, scaleRange.y);
                     var randomScale = Vector3.one * scale;
-                    matrices[i][j] = Matrix4x4.TRS(newPos, Quaternion.Euler(randomRotate), randomScale);
-                    velocities[i][j] = Vector3.zero;
+                    allMatrices[i] = Matrix4x4.TRS(newPos, Quaternion.Euler(randomRotate), randomScale);
+                    allVelocities[i] = Vector3.zero;
+                }
+            }
+            else
+            {
+                velocities = new Vector3[instanceCount / 1023 + 1][];
+                matrices = new Matrix4x4[instanceCount / 1023 + 1][];
+
+                for (int i = 0; i < instanceCount / 1023 + 1; i++)
+                {
+                    matrices[i] = new Matrix4x4[1023];
+                    velocities[i] = new Vector3[1023];
+                    for (int j = 0; j < 1023; j++)
+                    {
+                        var newPos = new Vector3(Random.Range(-positionRange.x, positionRange.x), spawnHeight,
+                            Random.Range(-positionRange.y, positionRange.y));
+                        var randomRotate = new Vector3(0, Random.Range(-360, 360), 0);
+                        var scale = Random.Range(scaleRange.x, scaleRange.y);
+                        var randomScale = Vector3.one * scale;
+                        matrices[i][j] = Matrix4x4.TRS(newPos, Quaternion.Euler(randomRotate), randomScale);
+                        velocities[i][j] = Vector3.zero;
+                    }
                 }
             }
         }
+
 
         private void Update()
         {
@@ -90,13 +115,10 @@ namespace _Game.Code
 
         private void CalcuateMatricesJobs()
         {
-            for (int i = 0; i < instanceCount / 1023 + 1; i++)
+            if (useSingleMatrix)
             {
-                var matricesChunk = this.matrices[i];
-                var velocitiesChunk = this.velocities[i];
-
-                var matrices = new NativeArray<Matrix4x4>(matricesChunk, Allocator.TempJob);
-                var velocities = new NativeArray<Vector3>(velocitiesChunk, Allocator.TempJob);
+                var matrices = new NativeArray<Matrix4x4>(allMatrices, Allocator.TempJob);
+                var velocities = new NativeArray<Vector3>(allVelocities, Allocator.TempJob);
 
                 var job = new PhysicsJob()
                 {
@@ -108,7 +130,7 @@ namespace _Game.Code
                     radius = radius,
                     speed = velocityUtil.speed,
                     upForce = upForce,
-                    baseSeed = i + 1,
+                    baseSeed = 1,
                     velocities = velocities,
                     matrices = matrices,
                     gravity = gravity
@@ -116,44 +138,77 @@ namespace _Game.Code
 
                 job.Complete();
 
-                for (int j = 0; j < velocities.Length; j++)
-                {
-                    this.velocities[i][j] = velocities[j];
-                }
-
-                NativeArray<Matrix4x4>.Copy(matrices, this.matrices[i]);
-                NativeArray<Vector3>.Copy(velocities, this.velocities[i]);
+                matrices.CopyTo(allMatrices);
+                velocities.CopyTo(allVelocities);
 
                 matrices.Dispose();
                 velocities.Dispose();
             }
+            else
+            {
+                for (int i = 0; i < instanceCount / 1023 + 1; i++)
+                {
+                    var matricesChunk = this.matrices[i];
+                    var velocitiesChunk = this.velocities[i];
+
+                    var matrices = new NativeArray<Matrix4x4>(matricesChunk, Allocator.TempJob);
+                    var velocities = new NativeArray<Vector3>(velocitiesChunk, Allocator.TempJob);
+
+                    var job = new PhysicsJob()
+                    {
+                        deltaTime = Time.deltaTime,
+                        force = force,
+                        friction = friction,
+                        groundHeight = groundHeight,
+                        headPosition = head.position,
+                        radius = radius,
+                        speed = velocityUtil.speed,
+                        upForce = upForce,
+                        baseSeed = i + 1,
+                        velocities = velocities,
+                        matrices = matrices,
+                        gravity = gravity
+                    }.Schedule(matrices.Length, 64);
+
+                    job.Complete();
+
+                    NativeArray<Matrix4x4>.Copy(matrices, this.matrices[i]);
+                    NativeArray<Vector3>.Copy(velocities, this.velocities[i]);
+
+                    matrices.Dispose();
+                    velocities.Dispose();
+                }
+            }
         }
+
 
         private void CalculateMatrices()
         {
-            for (int i = 0; i < instanceCount / 1023 + 1; i++)
+            if (useSingleMatrix)
             {
-                for (int j = 0; j < 1023; j++)
+                for (int i = 0; i < allMatrices.Length; i++)
                 {
                     Vector3 pos;
                     Quaternion rot;
                     Vector3 scale;
-                    matrices[i][j].Decompose(out pos, out rot, out scale);
-                    velocities[i][j] -= gravity * Time.deltaTime;
-                    velocities[i][j] -= (velocities[i][j]) * (Time.deltaTime);
-                    var dist = Vector3.Distance(head.position, pos);
+                    allMatrices[i].Decompose(out pos, out rot, out scale);
+
+                    allVelocities[i] -= gravity * Time.deltaTime;
+                    allVelocities[i] *= (1 - Time.deltaTime);
+
+                    float dist = Vector3.Distance(head.position, pos);
                     if (dist < radius)
                     {
-                        var t = 1 - dist / radius;
-                        var dir = head.position - pos;
+                        float t = 1 - dist / radius;
+                        Vector3 dir = head.position - pos;
                         dir.y -= upForce;
                         if (velocityUtil.speed > 0.5f)
                         {
-                            velocities[i][j] += dir * (Time.deltaTime * force * t * Mathf.Clamp01(velocityUtil.speed));
+                            allVelocities[i] += dir * (Time.deltaTime * force * t * Mathf.Clamp01(velocityUtil.speed));
                         }
                     }
 
-                    if (velocities[i][j].magnitude > 5)
+                    if (allVelocities[i].magnitude > 5)
                     {
                         rot = Quaternion.Slerp(rot, Random.rotation, 0.2f);
                     }
@@ -161,21 +216,72 @@ namespace _Game.Code
                     if (pos.y < groundHeight)
                     {
                         pos.y = groundHeight;
-                        velocities[i][j] = Vector3.MoveTowards(velocities[i][j], Vector3.zero, friction);
+                        allVelocities[i] = Vector3.MoveTowards(allVelocities[i], Vector3.zero, friction);
                     }
 
-                    pos -= velocities[i][j] * Time.deltaTime;
-                    matrices[i][j].SetTRS(pos, rot, scale);
+                    pos -= allVelocities[i] * Time.deltaTime;
+                    allMatrices[i].SetTRS(pos, rot, scale);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < instanceCount / 1023 + 1; i++)
+                {
+                    for (int j = 0; j < 1023; j++)
+                    {
+                        Vector3 pos;
+                        Quaternion rot;
+                        Vector3 scale;
+                        matrices[i][j].Decompose(out pos, out rot, out scale);
+
+                        velocities[i][j] -= gravity * Time.deltaTime;
+                        velocities[i][j] *= (1 - Time.deltaTime);
+
+                        float dist = Vector3.Distance(head.position, pos);
+                        if (dist < radius)
+                        {
+                            float t = 1 - dist / radius;
+                            Vector3 dir = head.position - pos;
+                            dir.y -= upForce;
+                            if (velocityUtil.speed > 0.5f)
+                            {
+                                velocities[i][j] +=
+                                    dir * (Time.deltaTime * force * t * Mathf.Clamp01(velocityUtil.speed));
+                            }
+                        }
+
+                        if (velocities[i][j].magnitude > 5)
+                        {
+                            rot = Quaternion.Slerp(rot, Random.rotation, 0.2f);
+                        }
+
+                        if (pos.y < groundHeight)
+                        {
+                            pos.y = groundHeight;
+                            velocities[i][j] = Vector3.MoveTowards(velocities[i][j], Vector3.zero, friction);
+                        }
+
+                        pos -= velocities[i][j] * Time.deltaTime;
+                        matrices[i][j].SetTRS(pos, rot, scale);
+                    }
                 }
             }
         }
 
+
         private void Draw()
         {
-            foreach (Matrix4x4[] batch in matrices)
+            if (useSingleMatrix)
             {
-                Graphics.DrawMeshInstanced(mesh, 0, material, batch, 1023, mpb,
+                Graphics.DrawMeshInstanced(mesh, 0, material, allMatrices, allMatrices.Length, mpb,
                     ShadowCastingMode.On);
+            }
+            else
+            {
+                foreach (Matrix4x4[] batch in matrices)
+                {
+                    Graphics.DrawMeshInstanced(mesh, 0, material, batch, 1023, mpb, ShadowCastingMode.On);
+                }
             }
         }
 
@@ -200,12 +306,15 @@ namespace _Game.Code
             [ReadOnly] public Vector3 gravity;
 
             [ReadOnly] public int baseSeed;
+            [ReadOnly] public bool useSingleMatrix;
 
             public NativeArray<Matrix4x4> matrices;
             public NativeArray<Vector3> velocities;
 
             public void Execute(int index)
             {
+                if (useSingleMatrix && index >= matrices.Length) return;
+
                 var seed = baseSeed + index;
                 var rnd = new Unity.Mathematics.Random((uint)seed);
 
@@ -225,14 +334,12 @@ namespace _Game.Code
                     }
                 }
 
-                if (velocities[index].magnitude>1f)
+                if (velocities[index].magnitude > 1f)
                 {
-                 quaternion q = new quaternion(rnd.NextFloat(-1,1),rnd.NextFloat(-1,1),rnd.NextFloat(-1,1),0);
-               q=  quaternion.Euler(rnd.NextFloat3(-360, 360));
-                    rot = math.slerp(rot, q,0.75f);
+                    quaternion q = new quaternion(rnd.NextFloat(-1, 1), rnd.NextFloat(-1, 1), rnd.NextFloat(-1, 1), 0);
+                    q = quaternion.Euler(rnd.NextFloat3(-360, 360));
+                    rot = math.slerp(rot, q, 0.75f);
                 }
-           
-
 
                 if (pos.y < groundHeight)
                 {
