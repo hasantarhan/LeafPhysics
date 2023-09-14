@@ -20,3 +20,5 @@ Support for both traditional Update() and Unity Jobs System calculations
 Simple and customizable implementation
 To use the physics solution in your project, simply add the GPUInstancing script to a GameObject, configure the properties as needed, and provide a mesh and material for rendering. Instances will be rendered and interact with physics based on the provided settings.
 
+
+
